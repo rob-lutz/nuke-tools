@@ -1,0 +1,105 @@
+import nuke
+import os
+
+def createSortedContactSheet():
+
+	# Make sorted list of node file names
+	nodes = nuke.selectedNodes()
+	fileList = []
+
+	for node in nodes:
+		fileList.append(node['file'].value().split('/')[-1])
+
+	fileList.sort()
+
+	# Make dictionary of read nodes and their filenames
+	nodes2 = nuke.selectedNodes()
+	nodes_by_name = {n['file'].value().split('/')[-1]: n for n in nodes2}
+
+	# Make list of ordered nodes 
+	ordered_nodes = [nodes_by_name[name] for name in fileList]
+
+
+	# Space out nodes in DAG
+	xOrigin = int(ordered_nodes[0]['xpos'].value())
+	yOrigin = int(ordered_nodes[0]['ypos'].value())
+	xSpacing = 0
+
+	for n in ordered_nodes:
+		n.setXpos(xOrigin + xSpacing)
+		n.setYpos(yOrigin)
+		xSpacing = xSpacing + 100
+
+# Contact sheet with ordered nodes
+# Start by creating lists to hold certain information -- this will become clear as we get into things
+
+	for node in ordered_nodes:
+		nodeList = []
+		xVals = []
+		yVals = []
+    # Loop through all selected nodes in the node graph
+	for node in ordered_nodes:
+
+# Checks whether the class of the selected node/nodes is a Read node or something else, and sets a variable which we will use to label our text nodes accordingly a bit later...
+		if node.Class() == "Read":
+			textValue = " [basename [file rootname [value [topnode].file]]]"
+		else:
+			textValue = " [value input.name]"
+
+		# Creates a text node underneath every selected node & connects its input accordingly
+		textNode = nuke.createNode("Text2")
+		textNode.setInput(0, node)
+
+        # Set the bbox of the text node to match the input format
+		textNode['box'].setValue(0, 0)
+		textNode['box'].setValue(0, 1)
+		textNode['box'].setExpression("input.width", 2)
+		textNode['box'].setExpression("input.height", 3)
+		textNode['xjustify'].setValue("left")
+		textNode['yjustify'].setValue("bottom")
+
+		# Add relevant label as per the if/else statement above
+		textNode['message'].setValue(textValue)
+		textNode['shadow_opacity'].setValue('1')
+		textNode['label'].setValue('[value message]')
+
+		# Add selected nodes to a list
+		nodeList.append(textNode)
+				
+		# Add the X and Y position of all selected nodes to their respective lists
+		xVals.append(node['xpos'].value())
+		yVals.append(node['ypos'].value())
+
+
+	# Create a contact sheet node. This will come in with the new defaults we set above!
+	cs = nuke.createNode("ContactSheet")
+
+	# Add custom knobs to the User tab to allow some control of our text nodes (User tab is created automatically by Nuke)
+	cs.addKnob(nuke.Text_Knob('',''))
+	cs.addKnob(nuke.Boolean_Knob('showText', 'Show Text', True))
+	textBG_ops = "None", "Shadow", "Solid"
+	cs.addKnob(nuke.Enumeration_Knob('textBG', 'Text Background', textBG_ops))
+	cs.addKnob(nuke.Double_Knob('textSize', 'Text Size'))
+	cs['textSize'].setValue(1)
+	cs.addKnob(nuke.Text_Knob('',''))
+
+	iterator = 0
+
+# Add relevant expressions to our text nodes, so the Text size & background options work as expected
+	for nodes in nodeList:
+
+		cs.setInput(iterator, nodes)
+		nodes['enable_background'].setExpression(cs['name'].value()+".textBG == 2 ? 1 : 0")
+		nodes['enable_shadows'].setExpression(cs['name'].value()+".textBG == 1 ? 1 : 0")
+		nodes['disable'].setExpression(cs['name'].value()+".showText == 1 ? 0 : 1")
+		nodes['global_font_scale'].setExpression(cs['name'].value()+".textSize")
+
+		iterator = iterator + 1
+
+		# Find the average of all selected nodes' X and Y positions
+		avgXpos = sum(xVals) / len(nodeList)
+		avgYpos = sum(yVals) / len(nodeList)
+
+		# Force set the position of our newly created contact sheet in the node graph
+		cs['xpos'].setValue(avgXpos)
+		cs['ypos'].setValue(avgYpos+200)
