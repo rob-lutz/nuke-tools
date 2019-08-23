@@ -1,0 +1,47 @@
+import nuke
+
+def bbox_to_transform():
+
+	firstFrame = nuke.root().firstFrame()
+	lastFrame = nuke.root().lastFrame()
+	n = None
+
+	try:
+		n = nuke.selectedNode()		
+	except ValueError:
+		
+		if n != None:
+			pass
+		else:
+			nuke.message('Please select a node')
+			return
+	   
+	try:
+		width = n.input(0).width()
+		height = n.input(0).height()
+	except:
+		width = nuke.root().width()
+		height = nuke.root().height()
+
+	# Execute AutoCrop
+	nuke.nodes.CurveTool(name='acNode', operation='Auto Crop', channels='rgba').setInput(0, n)
+	ac = nuke.toNode('acNode')
+	ac['ROI'].setValue(width, 2)
+	ac['ROI'].setValue(height, 3)
+	nuke.execute(ac, firstFrame, lastFrame, 1)
+
+	# Create and set Transform node
+	nuke.nodes.Transform(name = 'Baked_Transform').setInput(0, n)
+	bt = nuke.toNode('Baked_Transform')
+	bt['center'].setExpression(" ((parent.acNode.autocropdata.r)+(parent.acNode.autocropdata.x))/2 ", 0 )
+	bt['center'].setExpression(" ((parent.acNode.autocropdata.t)+(parent.acNode.autocropdata.y))/2 ", 1 )
+
+	# Bake animation curves function
+	def bakeCurve_x( x_curve, first, last, inc ):
+		for f in xrange( first, last, inc ):
+			x_curve.setKey( f, x_curve.evaluate( f ) )
+
+	bakeCurve_x(bt['center'].animation(0), firstFrame, lastFrame, 1)
+	bakeCurve_x(bt['center'].animation(1), firstFrame, lastFrame, 1)
+	bt['center'].setExpression('curve')
+	nuke.delete(ac)
